@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cek Unfollow</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+*{box-sizing:border-box;font-family:Poppins}
+body{margin:0;background:linear-gradient(120deg,#0b0b14,#1a0b22);color:#fff}
+.container{max-width:420px;margin:auto;padding:20px}
+.card{background:#151526;border-radius:18px;padding:18px;margin-bottom:15px}
+h1{text-align:center;color:#ff6fae}
+input,textarea,button{
+  width:100%;padding:12px;border:none;border-radius:12px;margin-top:8px
+}
+input,textarea{background:#0f0f1f;color:#fff}
+textarea{height:120px}
+button{background:#ff6fae;color:#000;font-weight:600;cursor:pointer}
+button.secondary{background:#23233d;color:#fff}
+.hidden{display:none}
+.unfollow{color:#ff7a7a}
+.badge{background:#23233d;border-radius:999px;padding:4px 10px;display:inline-block;margin:5px 0}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<!-- LOGIN -->
+<div class="card" id="authBox">
+  <h1>🔐 Login</h1>
+  <input id="inpUser" placeholder="Username">
+  <input id="inpPass" type="password" placeholder="Password">
+  <button id="btnLogin">Login</button>
+  <button class="secondary" id="btnRegister">Register</button>
+</div>
+
+<!-- APP -->
+<div id="appBox" class="hidden">
+
+  <div class="card">
+    <h1>✨ Cek Unfollow</h1>
+    <small id="welcome"></small>
+    <textarea id="followersInput" placeholder="1 username per baris"></textarea>
+    <button id="btnSave">Simpan & Cek</button>
+    <button class="secondary" onclick="location.reload()">Logout</button>
+  </div>
+
+  <div class="card">
+    <h3>🚫 Unfollow Hari Ini</h3>
+    <div id="todayUnfollow">-</div>
+  </div>
+
+  <div class="card">
+    <h3>📜 Riwayat</h3>
+    <div id="historyBox">Belum ada</div>
+  </div>
+
+  <div class="card">
+    <h3>📊 Grafik Followers</h3>
+    <canvas id="chart"></canvas>
+  </div>
+
+</div>
+</div>
+
+<script>
+const dbKey = "cekUnfollowDB_v2";
+let db = JSON.parse(localStorage.getItem(dbKey) || "{}");
+let currentUser = null;
+let chart = null;
+
+// ELEMENTS
+const authBox = document.getElementById("authBox");
+const appBox = document.getElementById("appBox");
+const inpUser = document.getElementById("inpUser");
+const inpPass = document.getElementById("inpPass");
+const welcome = document.getElementById("welcome");
+const followersInput = document.getElementById("followersInput");
+const todayUnfollow = document.getElementById("todayUnfollow");
+const historyBox = document.getElementById("historyBox");
+
+document.getElementById("btnRegister").onclick = register;
+document.getElementById("btnLogin").onclick = login;
+document.getElementById("btnSave").onclick = saveAndCheck;
+
+function saveDB(){
+  localStorage.setItem(dbKey, JSON.stringify(db));
+}
+
+function register(){
+  const u = inpUser.value.trim();
+  const p = inpPass.value;
+  if(!u || !p) return alert("Lengkapi data");
+  if(db[u]) return alert("Username sudah ada");
+  db[u] = {password:p, snapshots:[], history:[]};
+  saveDB();
+  alert("Register berhasil, silakan login");
+}
+
+function login(){
+  const u = inpUser.value.trim();
+  const p = inpPass.value;
+  if(!db[u] || db[u].password !== p) return alert("Login gagal");
+  currentUser = u;
+  authBox.classList.add("hidden");
+  appBox.classList.remove("hidden");
+  welcome.innerText = "Halo, " + u;
+  renderHistory();
+  renderChart();
+}
+
+function saveAndCheck(){
+  const list = followersInput.value.split("\n").map(x=>x.trim()).filter(Boolean);
+  if(!list.length) return alert("Isi followers dulu");
+
+  const today = new Date().toISOString().slice(0,10);
+  const user = db[currentUser];
+  const last = user.snapshots.at(-1)?.followers || [];
+
+  const unfollow = last.filter(x=>!list.includes(x));
+
+  user.snapshots.push({date:today, count:list.length, followers:list});
+  if(unfollow.length){
+    user.history.push({date:today, users:unfollow});
+  }
+
+  saveDB();
+
+  todayUnfollow.innerHTML = unfollow.length
+    ? unfollow.map(u=>`<div class="unfollow">- ${u}</div>`).join("")
+    : "Tidak ada";
+
+  renderHistory();
+  renderChart();
+}
+
+function renderHistory(){
+  const h = db[currentUser].history;
+  historyBox.innerHTML = h.length
+    ? h.map(e=>`
+      <div class="badge">${e.date}</div>
+      ${e.users.map(u=>`<div class="unfollow">- ${u}</div>`).join("")}
+    `).join("<hr>")
+    : "Belum ada";
+}
+
+function renderChart(){
+  const snaps = db[currentUser].snapshots;
+  if(!snaps.length) return;
+  const labels = snaps.map(s=>s.date);
+  const data = snaps.map(s=>s.count);
+
+  if(chart) chart.destroy();
+  chart = new Chart(document.getElementById("chart"), {
+    type:"line",
+    data:{labels,datasets:[{
+      data,
+      borderColor:"#ff6fae",
+      backgroundColor:"rgba(255,111,174,.2)",
+      tension:.4
+    }]},
+    options:{plugins:{legend:{display:false}}}
+  });
+}
+</script>
+</body>
+</html>
